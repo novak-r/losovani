@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b59c3">
+<title>Losování</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #f4f5f8; --card: #fff; --text: #1b1d22; --muted: #6b7180; --line: #e2e4ea;
+    --accent: #2b59c3; --accent-text: #fff; --warn: #c2410c; --ok: #15803d; --soft: #eef2fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121317; --card: #1c1e24; --text: #eceef3; --muted: #9aa0ad; --line: #2c2f38;
+      --accent: #6d93f0; --accent-text: #0d1020; --warn: #fb923c; --ok: #4ade80; --soft: #232838; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 17px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  header { display: flex; gap: 8px; padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 2; }
+  main { padding: 12px; max-width: 640px; margin: 0 auto; }
+  select, input, textarea, button { font: inherit; color: inherit; }
+  select, input[type=text], input[type=number], textarea {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; min-height: 44px; }
+  header select { flex: 1; font-weight: 600; }
+  button { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 14px;
+    min-height: 44px; cursor: pointer; }
+  button:active { transform: scale(.98); }
+  button:disabled { opacity: .4; }
+  .primary { background: var(--accent); color: var(--accent-text); border: none; font-weight: 700; }
+  .danger { color: var(--warn); }
+  .result { background: var(--card); border-radius: 16px; padding: 22px 12px; text-align: center; margin-bottom: 12px;
+    border: 1px solid var(--line); }
+  .result .name { font-size: 34px; font-weight: 800; min-height: 48px; word-break: break-word; }
+  .result .info { color: var(--muted); min-height: 24px; }
+  #draw { width: 100%; font-size: 26px; padding: 22px; border-radius: 18px; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .row > button { flex: 1; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 22px 4px 8px; }
+  .students { list-style: none; padding: 0; margin: 0; background: var(--card); border-radius: 14px; border: 1px solid var(--line); overflow: hidden; }
+  .students li { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); min-height: 50px; }
+  .students li:last-child { border-bottom: none; }
+  .students li.tap { cursor: pointer; }
+  .students li.tap:active { background: var(--soft); }
+  .students .n { flex: 1; }
+  .badge { min-width: 30px; text-align: center; border-radius: 99px; padding: 2px 8px; background: var(--soft); font-weight: 700; }
+  .tag { font-size: 13px; color: var(--warn); border: 1px solid currentColor; border-radius: 99px; padding: 1px 8px; }
+  .hint { color: var(--muted); font-size: 14px; margin: 6px 4px; }
+  .edit input[type=text] { flex: 1; min-width: 0; }
+  .edit input[type=number] { width: 64px; }
+  .edit label { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+  .edit button { padding: 6px 10px; }
+  textarea { width: 100%; min-height: 140px; }
+  .hidden { display: none !important; }
+  .stack > * { margin-top: 8px; }
+  .wrap { flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <select id="listSel" aria-label="Seznam"></select>
+  <button id="toggleView" aria-label="Správa">⚙ Správa</button>
+</header>
+
+<main id="drawView">
+  <div class="result">
+    <div class="name" id="resName">—</div>
+    <div class="info" id="resInfo"></div>
+  </div>
+  <button id="draw" class="primary">Losovat</button>
+  <div class="row">
+    <button id="absent" class="danger">Chybí</button>
+    <button id="undo">↶ Zpět</button>
+  </div>
+  <h2>Studenti</h2>
+  <p class="hint">Klepnutím na jméno označíš dobrovolníka. Číslo = kolikrát byl zkoušen.</p>
+  <ul class="students" id="stuList"></ul>
+</main>
+
+<main id="manageView" class="hidden">
+  <h2>Seznamy</h2>
+  <div class="row wrap">
+    <button id="newList">+ Nový seznam</button>
+    <button id="renameList">Přejmenovat</button>
+    <button id="deleteList" class="danger">Smazat seznam</button>
+  </div>
+
+  <h2>Import jmen</h2>
+  <p class="hint">Zkopíruj buňky z tabulky (1 sloupec „Jméno Příjmení“ nebo 2 sloupce) a vlož sem, nebo vyber soubor CSV. Pak klepni Převést, zkontroluj (smaž např. řádek s nadpisem) a přidej.</p>
+  <div class="stack">
+    <textarea id="importText" placeholder="Novák&#9;Jan&#10;Svobodová&#9;Eva"></textarea>
+    <input type="file" id="importFile" accept=".csv,.txt,text/csv,text/plain">
+    <div class="row">
+      <button id="parseBtn">Převést</button>
+      <button id="addBtn" class="primary">Přidat do seznamu</button>
+    </div>
+  </div>
+
+  <h2>Studenti v seznamu</h2>
+  <div class="row"><input type="text" id="newName" placeholder="Nové jméno" style="flex:1"><button id="addOne">Přidat</button></div>
+  <ul class="students edit" id="editList" style="margin-top:8px"></ul>
+  <div class="row"><button id="resetCounts" class="danger">Vynulovat počty zkoušení</button></div>
+
+  <h2>Záloha</h2>
+  <p class="hint">Data jsou uložená jen v tomto telefonu. Občas si ulož zálohu.</p>
+  <div class="row">
+    <button id="exportBtn">Uložit zálohu</button>
+    <button id="importBackupBtn">Načíst zálohu</button>
+    <input type="file" id="backupFile" accept=".json,application/json" class="hidden">
+  </div>
+</main>
+
+<script>
+const KEY = 'losovani';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const today = () => new Date().toLocaleDateString('sv'); // YYYY-MM-DD v místním čase
+const collator = new Intl.Collator('cs');
+
+// ---------- čistá logika (testovaná v ?test) ----------
+
+// Řádky tabulky -> jména. 2 sloupce se spojí mezerou.
+function parseNames(text) {
+  return text.split(/\r?\n/)
+    .map(line => line.split(/\t|;|,/).map(c => c.trim().replace(/^"|"$/g, '').trim()).filter(Boolean).slice(0, 2).join(' '))
+    .filter(Boolean);
+}
+
+// Chybějící je blokován v den absence a na první další hodině.
+function isBlocked(s, lessons, day) {
+  if (!s.absentDate) return false;
+  return lessons.filter(d => d > s.absentDate && d < day).length < 1;
+}
+
+function eligible(list, day) {
+  const ok = list.students.filter(s => !isBlocked(s, list.lessons, day));
+  if (!ok.length) return [];
+  const min = Math.min(...ok.map(s => s.count));
+  return ok.filter(s => s.count === min);
+}
+
+function record(list, s, type, day) {
+  const addedLesson = !list.lessons.includes(day);
+  if (addedLesson) list.lessons.push(day);
+  list.history.push({ sid: s.id, type, day, addedLesson, prev: { count: s.count, absentDate: s.absentDate } });
+  if (list.history.length > 300) list.history.shift();
+  s.count++;
+  s.absentDate = null;
+}
+
+function draw(list, day, rnd = Math.random) {
+  const pool = eligible(list, day);
+  if (!pool.length) return null;
+  const s = pool[Math.floor(rnd() * pool.length)];
+  record(list, s, 'draw', day);
+  return s;
+}
+
+// Poslední losovaný chybí: počet zpět, označit absenci. prev zůstává -> Zpět vrátí vše.
+function markAbsent(list, day) {
+  const h = list.history.at(-1);
+  if (!h || h.type !== 'draw') return null;
+  const s = list.students.find(x => x.id === h.sid);
+  if (!s) return null;
+  h.type = 'absent';
+  s.count = h.prev.count;
+  s.absentDate = day;
+  return s;
+}
+
+function undo(list) {
+  const h = list.history.pop();
+  if (!h) return null;
+  const s = list.students.find(x => x.id === h.sid);
+  if (s) Object.assign(s, h.prev);
+  if (h.addedLesson) list.lessons = list.lessons.filter(d => d !== h.day);
+  return s || { name: '(smazaný student)' };
+}
+
+const newList = name => ({ id: uid(), name, students: [], lessons: [], history: [] });
+const newStudent = name => ({ id: uid(), name, count: 0, absentDate: null });
+
+// ---------- stav ----------
+let data;
+try { data = JSON.parse(localStorage.getItem(KEY)); } catch { data = null; }
+if (!data || !Array.isArray(data.lists) || !data.lists.length) {
+  const l = newList('Moje třída');
+  data = { current: l.id, lists: [l] };
+}
+const save = () => localStorage.setItem(KEY, JSON.stringify(data));
+const cur = () => data.lists.find(l => l.id === data.current) || data.lists[0];
+let message = null; // {name, info}
+
+// ---------- vykreslení ----------
+const $ = id => document.getElementById(id);
+const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function render() {
+  const list = cur();
+  data.current = list.id;
+  $('listSel').innerHTML = data.lists.map(l => `<option value="${l.id}" ${l.id === list.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+
+  const last = list.history.at(-1);
+  const lastS = last && list.students.find(s => s.id === last.sid);
+  if (!message && last && last.day === today() && lastS) {
+    const what = { draw: 'vylosován', volunteer: 'dobrovolník', absent: 'chybí – losuj znovu' }[last.type];
+    message = { name: lastS.name, info: what };
+  }
+  $('resName').textContent = message ? message.name : '—';
+  $('resInfo').textContent = message ? message.info : `${list.students.length} studentů`;
+  $('absent').disabled = !(last && last.type === 'draw' && last.day === today());
+  $('undo').disabled = !list.history.length;
+  $('draw').disabled = !list.students.length;
+
+  const day = today();
+  const sorted = [...list.students].sort((a, b) => collator.compare(a.name, b.name));
+  $('stuList').innerHTML = sorted.map(s => `<li class="tap" data-id="${s.id}">
+      <span class="n">${esc(s.name)}</span>
+      ${s.absentDate ? `<span class="tag">${isBlocked(s, list.lessons, day) ? 'chyběl – příště ne' : 'chyběl'}</span>` : ''}
+      <span class="badge">${s.count}</span></li>`).join('') || '<li class="hint">Seznam je prázdný – přidej jména ve Správě.</li>';
+
+  $('editList').innerHTML = sorted.map(s => `<li data-id="${s.id}">
+      <input type="text" value="${esc(s.name)}" data-f="name" aria-label="Jméno">
+      <input type="number" min="0" value="${s.count}" data-f="count" aria-label="Počet zkoušení">
+      <label><input type="checkbox" data-f="absent" ${s.absentDate ? 'checked' : ''}>chyběl</label>
+      <button data-f="del" class="danger" aria-label="Smazat">✕</button></li>`).join('');
+  save();
+}
+
+function show(name, info) { message = { name, info }; render(); }
+
+// ---------- události ----------
+$('listSel').onchange = e => { data.current = e.target.value; message = null; render(); };
+$('toggleView').onclick = () => {
+  const manage = $('manageView').classList.toggle('hidden') === false;
+  $('drawView').classList.toggle('hidden', manage);
+  $('toggleView').textContent = manage ? '← Losování' : '⚙ Správa';
+};
+
+$('draw').onclick = () => {
+  const s = draw(cur(), today());
+  s ? show(s.name, `vylosován (${s.count}×)`) : show('Nikdo', 'Není koho losovat – všichni jsou blokovaní nebo seznam je prázdný.');
+};
+$('absent').onclick = () => { const s = markAbsent(cur(), today()); if (s) show(s.name, 'chybí – losuj znovu'); };
+$('undo').onclick = () => { const s = undo(cur()); if (s) show(s.name, 'vráceno zpět'); };
+$('stuList').onclick = e => {
+  const li = e.target.closest('li[data-id]'); if (!li) return;
+  const list = cur(), s = list.students.find(x => x.id === li.dataset.id);
+  if (s && confirm(`${s.name} se hlásí dobrovolně?`)) { record(list, s, 'volunteer', today()); show(s.name, `dobrovolník (${s.count}×)`); }
+};
+
+$('newList').onclick = () => {
+  const name = prompt('Název nového seznamu (např. 3.A matematika):'); if (!name?.trim()) return;
+  const l = newList(name.trim()); data.lists.push(l); data.current = l.id; message = null; render();
+};
+$('renameList').onclick = () => { const l = cur(), n = prompt('Nový název:', l.name); if (n?.trim()) { l.name = n.trim(); render(); } };
+$('deleteList').onclick = () => {
+  const l = cur(); if (!confirm(`Opravdu smazat seznam „${l.name}“ i se všemi daty?`)) return;
+  data.lists = data.lists.filter(x => x !== l);
+  if (!data.lists.length) data.lists.push(newList('Moje třída'));
+  data.current = data.lists[0].id; message = null; render();
+};
+
+$('importFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const buf = await f.arrayBuffer();
+  let text = new TextDecoder('utf-8').decode(buf);
+  if (text.includes('�')) text = new TextDecoder('windows-1250').decode(buf); // starší Excel CSV
+  $('importText').value = parseNames(text).join('\n');
+  e.target.value = '';
+};
+$('parseBtn').onclick = () => { $('importText').value = parseNames($('importText').value).join('\n'); };
+$('addBtn').onclick = () => {
+  const names = parseNames($('importText').value); if (!names.length) return alert('Žádná jména k přidání.');
+  const list = cur(), have = new Set(list.students.map(s => s.name));
+  const fresh = names.filter(n => !have.has(n));
+  fresh.forEach(n => list.students.push(newStudent(n)));
+  $('importText').value = '';
+  render();
+  alert(`Přidáno ${fresh.length} jmen` + (names.length > fresh.length ? ` (${names.length - fresh.length} už v seznamu bylo).` : '.'));
+};
+$('addOne').onclick = () => { const n = $('newName').value.trim(); if (n) { cur().students.push(newStudent(n)); $('newName').value = ''; render(); } };
+
+$('editList').onchange = e => {
+  const li = e.target.closest('li'), s = cur().students.find(x => x.id === li.dataset.id), f = e.target.dataset.f;
+  if (f === 'name' && e.target.value.trim()) s.name = e.target.value.trim();
+  if (f === 'count') s.count = Math.max(0, parseInt(e.target.value) || 0);
+  if (f === 'absent') s.absentDate = e.target.checked ? today() : null;
+  message = null; render();
+};
+$('editList').onclick = e => {
+  if (e.target.dataset.f !== 'del') return;
+  const list = cur(), id = e.target.closest('li').dataset.id, s = list.students.find(x => x.id === id);
+  if (confirm(`Smazat ${s.name}?`)) { list.students = list.students.filter(x => x.id !== id); message = null; render(); }
+};
+$('resetCounts').onclick = () => {
+  const l = cur(); if (!confirm(`Vynulovat počty zkoušení v „${l.name}“?`)) return;
+  l.students.forEach(s => { s.count = 0; s.absentDate = null; }); l.history = []; message = null; render();
+};
+
+$('exportBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = `losovani-zaloha-${today()}.json`; a.click();
+};
+$('importBackupBtn').onclick = () => $('backupFile').click();
+$('backupFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!Array.isArray(d.lists) || !d.lists.length) throw 0;
+    if (!confirm('Načíst zálohu? Současná data budou nahrazena.')) return;
+    data = d; message = null; render(); alert('Záloha načtena.');
+  } catch { alert('Soubor není platná záloha.'); }
+};
+
+render();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');
+
+// ---------- self-test: index.html?test ----------
+if (location.search.includes('test')) {
+  const A = console.assert;
+  A(parseNames('Novák\tJan\n\nSvobodová;Eva\r\n"Petr Malý"\n,\n').join('|') === 'Novák Jan|Svobodová Eva|Petr Malý', 'parse');
+  const L = newList('t'); ['a', 'b', 'c'].forEach(n => L.students.push(newStudent(n)));
+  const first = new Set([0, 1, 2].map(() => draw(L, '2026-01-01').name));
+  A(first.size === 3, 'nejdřív všichni jednou');
+  A(draw(L, '2026-01-01').count === 2, 'pak podruhé');
+  // absence: c chybí 1.2., blokován 1.2. a 2.2. (další hodina), 3.2. má přednost
+  const M = newList('m'); ['a', 'b', 'c'].forEach(n => M.students.push(newStudent(n)));
+  const c = M.students[2];
+  let s; do { s = draw(M, '2026-02-01'); } while (s !== c && (undo(M), true));
+  markAbsent(M, '2026-02-01');
+  A(c.count === 0 && c.absentDate === '2026-02-01', 'absent');
+  A(!eligible(M, '2026-02-01').includes(c), 'blok v den absence');
+  draw(M, '2026-02-02'); draw(M, '2026-02-02');
+  A(!eligible(M, '2026-02-02').includes(c) && M.students.every(x => x === c || x.count === 1), 'blok na další hodině');
+  A(draw(M, '2026-02-03') === c, 'pak má přednost');
+  undo(M); A(c.count === 0 && c.absentDate === '2026-02-01' && !M.lessons.includes('2026-02-03'), 'undo');
+  console.log('self-test hotov');
+}
+</script>
+</body>
+</html>
